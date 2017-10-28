@@ -18,9 +18,6 @@ using std::string;
 using std::map;
 using std::pair;
 
-#define CHECK_ERROR(STATUS, STRING_ERROR)\
-if(STATUS == ERROR){ error += STRING_ERROR; throw error; }
-
 class Server_t {
     public:    
         explicit Server_t() {
@@ -52,6 +49,13 @@ class Server_t {
         bool Send_Messages(string message);
         long Find_New_id();
         void Print_Users();
+		void print_er(string error);
+
+		bool System_New_User(string name);
+		bool System_Exit_User(string name);
+		void Admin_Id_User(string name);
+		bool Admin_Del_User(string name);
+		void Admin_Stop_Server();
 };
 
 Server_t::~Server_t() {
@@ -59,12 +63,16 @@ Server_t::~Server_t() {
     fclose(error_file);
 }
 
+void Server_t::print_er(string error) {
+	printf("%s", error.c_str());
+}
+
 void Server_t::Print_Users() {
-    auto begin = Data.begin();
+    auto runner = Data.begin();
     auto end = Data.end();
-    for (auto it = begin; it != end; ++it) {
-        printf("%ld : ", it->first);
-        printf("%s\n", it->second.c_str());
+    for ( ; runner != end; ++runner) {
+        printf("%ld : ", runner->first);
+        printf("%s\n", runner->second.c_str());
     }
 }
 
@@ -99,7 +107,7 @@ bool Server_t::Get_Messages() {
                 error = "Error - Get size of message Server\n";
                 throw error;
             }
-            if (! Messenger.Get_Message_String(Memory_Id, &message_string, 0, 0, message_size.size)) {
+            if (! Messenger.Get_Message_String(Memory_Id, &message_string, message_size.mtype, 0, message_size.size)) {
                 error = "Error - Get string of message Server\n";
                 throw error;
             }
@@ -198,11 +206,11 @@ bool Server_t::Send_Messages(long id, string message) {
 bool Server_t::Send_Messages_S(long id, string message) {
     try{
         message += std::to_string(id);
-        if(!Messenger.Send_Message_Size(Memory_Id, &message_size, 0, message.size(), 0)) {
+        if(!Messenger.Send_Message_Size(Memory_Id, &message_size, system_id, message.size(), 0)) {
             error = "Error - Send message size\n";
             throw error;
         }
-        if(!Messenger.Send_Message_String(Memory_Id, &message_string, 0, message, 0)) {
+        if(!Messenger.Send_Message_String(Memory_Id, &message_string, system_id, message, 0)) {
             error = "Error - Send message \n";
             throw error;
         }
@@ -227,38 +235,39 @@ long Server_t::Find_New_id() {
 
 bool Server_t::System_Call(string message) {
     try {
-        string name_user = "";
-        long client_id = 0;
-        if (message.compare(0, 10, "new client:") == 0) {
-            name_user = message.substr(11);
-            client_id = Find_New_id();
-            CHECK_ERROR(client_id, "Error find id\n")
-            Data.insert( pair<long, string>(client_id, name_user) );
-            if (!Send_Messages_S(client_id, name_user)) {
-                error = "Error - new user\n";
-                throw error;
-            }
+		if (message.compare(0, 19, new_client) == 0) {
+            string name = message.substr(20);
+			if (!System_New_User(name)){
+				error = "Error - new user\n";
+				throw error;
+			}
         }
-        else if(message.compare(0, 3, "exit:") == 0) {
-            name_user = message.substr(4);
-            size_t pos = 0;
-            long client_id = stoul(name_user, &pos, 10);
-            if (pos != (message.size() - 4)) {
-                error = "Error - wrong user\n";
-                throw error;
-            }
-            auto it = Data.find(client_id);
-            if (it == Data.end()) {
-                error = "Error - no client\n";
-                throw error;
-            }
-            message = it->second;
-            if (!Send_Messages(message)) {
-                error = "Error - del user\n";
-                throw error;
-            }
-            Data.erase(client_id);
+
+		else if(message.compare(0, 13, exit) == 0) {
+            string id = message.substr(14);
+			if (!System_New_User(id)) {
+				error = "Error -  user\n";
+				throw error;
+			}
         }
+
+		else if(message == stop_server) {
+			Admin_Stop_Server();
+		}
+
+		else if(message.compare(0, 20, delete_user) == 0) {
+			string name_user = message.substr(21);
+			if (!Admin_Del_User(name_user)) {
+				error = "Error - del user";
+				throw error;
+			}
+		}
+
+		else if (message.compare(0, 16, find_id) == 0) {
+			string name_user = message.substr(17);
+			Admin_Id_User(name_user);
+		}
+
         return true;
     }
     catch(string error) {
@@ -267,5 +276,111 @@ bool Server_t::System_Call(string message) {
     }   
 }
 
-#undef CHECK_ERROR
+bool Server_t::System_New_User(string name) {
+	try {
+		if (name == "Admin") {
+			auto it = Data.find(ADMIN);
+			if (it == Data.end()) {
+				Send_Messages_S(ADMIN, "Admin");
+			}
+			else {
+				Data.insert(pair<long, string>(ADMIN, "Admin"));
+				Send_Messages_S(ADMIN, "Admin");
+			}
+		}
+		else {
+			long client_id = Find_New_id();
+			if (client_id == ERROR) {
+				error = "Error - find new id\n";
+				throw error;
+			}
+			Data.insert(pair<long, string>(client_id, name));
+			if (!Send_Messages_S(client_id, name)) {
+				error = "Error - new user\n";
+				throw error;
+			}
+		}
+		return true;
+	}
+	catch (string error) {
+		print_er(error);
+		return false;
+	}
+}
+
+bool Server_t::System_Exit_User(string name) {
+	try {
+		size_t pos = 0;
+		long client_id = stoul(name, &pos, 10);
+		if (pos != (name.size())) {
+			error = "Error - wrong user\n";
+			throw error;
+		}
+		auto it = Data.find(client_id);
+		if (it == Data.end()) {
+			error = "Error - no client\n";
+			throw error;
+		}
+		name = it->second;
+		name = "User exit : " + name;
+		Data.erase(client_id);
+		Send_Messages(name);
+		Send_Messages(client_id, end);
+		return true;
+	}
+	catch (string error) {
+		print_er(error);
+		return false;
+	}
+}
+
+void Server_t::Admin_Id_User(string name) {
+	auto runner = Data.begin();
+	auto end = Data.end();
+	for ( ; runner != end; ++runner){
+		if (runner->second == name) {
+			Send_Messages(ADMIN, std::to_string(runner->first));
+			return;
+		}
+	}
+	Send_Messages(ADMIN, "error find user");
+	return;
+}
+
+bool Server_t::Admin_Del_User(string name) {
+	try {
+		if (message_string.mtype == ADMIN) {
+			size_t pos = 0;
+			long client_id = stoul(name, &pos, 10);
+			if (pos != (name.size())) {
+				error = "Error - wrong user\n";
+				throw error;
+			}
+			else {
+				auto it = Data.find(client_id);
+				if (it == Data.end()) {
+					Send_Messages(ADMIN, "error - user");
+				}
+				else {
+					Send_Messages(client_id, "#system:end");
+					Data.erase(client_id);
+				}
+			}
+		}
+		return true;
+	}
+	catch (string error) {
+		print_er(error);
+		return false;
+	}
+}
+
+void Server_t::Admin_Stop_Server() {
+	if (message_string.mtype == ADMIN) {
+		string message = end;
+		Send_Messages(message);
+		flag = false;
+	}
+}
+
 #endif SERVER_HEADER

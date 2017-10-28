@@ -42,10 +42,16 @@ class Message_t {
         bool flag;
         string error;
         FILE* error_file;
+
+		void print_er(string error);
 };
 
 Message_t::~Message_t() {
     fclose(error_file);
+}
+
+void Message_t::print_er(string error) {
+	printf("%s", error.c_str());
 }
 
 int Message_t::Create_Message_Thread(const char* way, size_t code) {
