@@ -7,8 +7,10 @@ int main() {
     printf("Starting...\n");
     Server_t Server;
     if (!Server.Start()) {
-		printf("Error - Start Server\n");
+        printf("Error - Start Server\n");
+        getchar();
         return false;
     }
+    getchar();
     return true;
 }
