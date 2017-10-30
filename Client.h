@@ -207,4 +207,5 @@ bool Client_t::Get_Id() {
 	}
 }
 
+#endif // CLIENT_HEADER_H<<<<<<< HEAD:Client.h
 #endif // CLIENT_HEADER_H
