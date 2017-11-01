@@ -5,7 +5,6 @@
 #include <cstdlib>
 #include <sys/types.h>
 #include <sys/ipc.h>
-#include <sys/types.h>
 #include <sys/msg.h>
 #include <cstring>
 #include <string>
@@ -22,7 +21,6 @@ class Message_t {
         explicit Message_t() {
             _way = "Error";
             _code = 0;
-            bool flag = true;
             _size = 0;
             error = "Error - ";
             error_file = NULL;
@@ -30,8 +28,9 @@ class Message_t {
         ~Message_t();
 
         int Create_Message_Thread(const char* way, size_t code);
-        bool Send_Message_String(int msgid ,msgbuf_t* mes, long Id, string message, size_t type);
+        bool Send_Message_String(int msgid ,msgbuf_t* mes, long Id, string& message, size_t type);
         bool Send_Message_Size(int msgid ,msgsize_t* mes, long Id, size_t size, size_t type);
+        bool Send_Message(int msgid ,msgbuf_t* mes_b, msgsize_t* mes_s, long Id, string& message, size_t type);
         bool Get_Message_String(int msgid, string& message, long msgtyp, int msgflg, size_t size);
         bool Get_Message_Size(int msgid, msgsize_t* mes, long msgtyp, int msgflg);
 
@@ -39,7 +38,6 @@ class Message_t {
         const char* _way;
         size_t _code;
         size_t _size;
-        bool flag;
         string error;
         FILE* error_file;
 
@@ -87,6 +85,10 @@ bool Message_t::Send_Message_Size(int msgid ,msgsize_t* mes, long Id, size_t siz
             error = "Error - _size size of message send\n";
             throw error;
         }
+        if (size > MAX_SIZE) {
+            error = "Error - strnge error!\n";
+            throw error;
+        }
 		mes->mtype = Id;
         mes->size = size;
         int status = msgsnd(msgid, (void *) mes, sizeof(size_t) , type);
@@ -100,22 +102,59 @@ bool Message_t::Send_Message_Size(int msgid ,msgsize_t* mes, long Id, size_t siz
     }
 }
 
-bool Message_t::Send_Message_String(int msgid ,msgbuf_t* mes, long Id, string message, size_t type) {
+bool Message_t::Send_Message_String(int msgid ,msgbuf_t* mes, long Id, string& message, size_t type) {
     try {
         mes->mtype = Id;
         size_t size = message.size();
         memcpy(mes->message, message.c_str(), size);
         if(_size != size) {
-            error = "Error - _size message send\n";
-            throw error;
+            printf("Warning: Size: %zu _Size: %zu\n", size, _size);
         }
-        int status = msgsnd(msgid, (void *) mes, _size * sizeof(char) , type);
+        int status = msgsnd(msgid, (void *) mes, size * sizeof(char) , type);
         CHECK_ERROR(status ,"Error - msgsnd - send string\n");
         _size = 0;
         return true;
     }
     catch (string error) {
 		print_er(error);
+        return false;
+    }
+}
+
+bool Message_t::Send_Message(int msgid ,msgbuf_t* mes_b, msgsize_t* mes_s, long Id, string& message, size_t type) {
+    try {
+        if (message.size() <= MAX_SIZE) {
+            if(!Send_Message_Size(msgid, mes_s, Id, message.size(), type)) {
+                error = "Error - Send message size\n";
+                throw error;
+            }
+            if(!Send_Message_String(msgid, mes_b, Id, message, type)) {
+                error = "Error - Send message \n";
+                throw error;
+            }
+            return true;
+        }
+        else {
+            string new_message = "";
+            size_t length = message.size();
+            size_t i = 0;
+            length = (length - (length % MAX_SIZE)) / MAX_SIZE;
+
+            while (i < length) {
+                new_message = message.substr(MAX_SIZE * i, MAX_SIZE * (i + 1));
+                ++i;
+                if (!Send_Message(msgid, mes_b, mes_s, Id, new_message, type)) {
+                    error = "Error - Send all st\n";
+                    throw error;
+                }
+            }
+            new_message = message.substr(MAX_SIZE * i);
+            Send_Message(msgid, mes_b, mes_s, Id, new_message, type);
+        }
+        return true;
+    }
+    catch(string error) {
+        print_er(error);
         return false;
     }
 }
@@ -153,8 +192,12 @@ bool Message_t::Get_Message_String(int msgid, string& message, long msgtyp, int 
         char* test = new char[size + sizeof(long)];
         memcpy(test, buf->message, size);
         message = test;
+        if (message.size() > size) {
+            message = message.substr(0 , size);
+        }
         CHECK_ERROR(status ,"Error - msgrcv - get mes\n");
         _size = 0;
+        free(buf);
         return true;
     }
     catch (string error) {

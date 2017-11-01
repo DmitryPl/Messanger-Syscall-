@@ -78,7 +78,6 @@ bool Client_t::Start() {
 			error = "Error - Get_Id\n";
 			throw error;
 		}
-		printf("...\n");
 		pid_t status = fork();
 		switch (status) {
 		case -1: //error
@@ -112,17 +111,15 @@ bool Client_t::Send_Message() {
 			std::getline(std::cin, message);
 			if (message == exit_sys) {
 				message = message + std::to_string(user_id);
-				Messenger.Send_Message_Size(Memory_Id, &message_size, system_id, message.size(), 0);
-				Messenger.Send_Message_String(Memory_Id, &message_string, system_id, message, 0);
+				if (!Messenger.Send_Message(Memory_Id, &message_string, &message_size, system_id, message, 0)) {
+					error = "Error - Send exit\n";
+					throw error;
+				}
 				flag = false;
 			}
 			else {
-				if (!Messenger.Send_Message_Size(Memory_Id, &message_size, user_id, message.size(), 0)) {
-					error = "Error - Send size of Message Normal\n";
-					throw error;
-				}
-				if (!Messenger.Send_Message_String(Memory_Id, &message_string, user_id, message, 0)) {
-					error = "Error - Send Message Normal\n";
+				if (!Messenger.Send_Message(Memory_Id, &message_string, &message_size, user_id, message, 0)) {
+					error = "Error - Send message\n";
 					throw error;
 				}
 			}
@@ -199,6 +196,7 @@ bool Client_t::Get_Id() {
 			error = "Error - Get Id\n";
 			throw error;
 		}
+		printf("Your Id: %ld\n", user_id);
 		return true;
 	}
 	catch (string error) {
@@ -207,5 +205,4 @@ bool Client_t::Get_Id() {
 	}
 }
 
-#endif // CLIENT_HEADER_H<<<<<<< HEAD:Client.h
 #endif // CLIENT_HEADER_H

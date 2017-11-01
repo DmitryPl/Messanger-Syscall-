@@ -5,10 +5,11 @@
 #include <cstdlib>
 #include <sys/types.h>
 #include <sys/ipc.h>
-#include <sys/types.h>
 #include <sys/msg.h>
+#include <unistd.h>
 #include <cstring>
 #include <string>
+#include <iostream>
 #include <vector>
 #include <map>
 
@@ -27,7 +28,6 @@ class Server_t {
             error_file = NULL;
             Memory_Id = 0;
             num = 1;
-            error = "";
             message_size.mtype = 0;
             message_size.size = 0;
             message_string.mtype = 0;
@@ -49,6 +49,9 @@ class Server_t {
         Message_t Messenger;
         map<long, string> Data;
         vector<size_t> Id_Mas;
+        long Last_Id;
+        long Prev_Id;
+        string last_message;
 
         bool Get_Messages();
         bool Processing();
@@ -67,6 +70,7 @@ class Server_t {
 		void Admin_Id_User(string name);
 		bool Admin_Del_User(string name);
         void Admin_Stop_Server();
+        bool Get_System_Com();
 };
 
 Server_t::~Server_t() {
@@ -107,16 +111,43 @@ bool Server_t::Start() {
             throw error;
         }
         printf("Memory Id:%zu\n", Memory_Id);
-        if (!Get_Messages()) {
-            error = "Error - Get Messages\n";
-            throw error;
-        }
+        pid_t status = fork();
+		switch (status) {
+		case -1: //error
+			error = "Error - fork \n";
+			throw error;
+		case 0:  //son
+			if (!Get_Messages()) {
+				error = "Error - Get Messages \n";
+				throw error;
+			}
+			break;
+		default: //father
+			if (!Get_System_Com()) {
+				error = "Error - Send Message \n";
+				throw error;
+			}
+			break;
+		}
     }
     catch(string error) {
 		print_er(error);
         return false;
     }
     return true;
+}
+
+bool Server_t::Get_System_Com() {
+    while (flag) {
+        string command = "";
+        std::getline(std::cin, command);
+        if (command == "exit") {
+            command = stop_server_sys;
+            Messenger.Send_Message(Memory_Id, &message_string, &message_size, system_id, command, 0);
+            flag = false;
+            return true;
+        }
+    }
 }
 
 bool Server_t::Find_Message() {
@@ -139,13 +170,14 @@ bool Server_t::Find_Message() {
 bool Server_t::Get_Messages() {
     while (flag) {
         try {
-            printf("num of message:%zu\n", num);
+            printf("\nnum of message:%zu\n", num);
             if (!Find_Message()) {
                 error = "Error - Find Message\n";
                 throw error;
             }
             else {
                 num++;
+                Last_Id = message_size.mtype;
                 printf("Client Id:%ld, size:%zu\n", message_size.mtype, message_size.size);
                 if (! Messenger.Get_Message_String(Memory_Id, message_get, message_size.mtype, 0,   message_size.size)) {
                     error = "Error - Get string of message Server\n";
@@ -168,14 +200,13 @@ bool Server_t::Get_Messages() {
 
 bool Server_t::Processing() {
     try {
-        long id = message_size.mtype;
-        if (id == system_id) {
+        if ((Last_Id == system_id) || (Last_Id == ADMIN)) {
             if (!System_Call(message_get)) {
                 error = "Error - System Call\n";
                 throw error;
             }
         }
-        else if (!Send_Messages(id, message_get)) {
+        else if (!Send_Messages(Last_Id, message_get)) {
             error = "Error - Send Messages\n";
             throw error;
         }
@@ -187,19 +218,41 @@ bool Server_t::Processing() {
     }
 }
 
+/*bool Server_t::Processing() { // with accumulation
+    try {
+        if ((Last_Id == system_id) || (Last_Id == ADMIN)) {
+            if (!System_Call(message_get)) {
+                error = "Error - System Call\n";
+                throw error;
+            }
+        }
+        if (Last_Id == Prev_Id) {
+            last_message += message_get;
+            return true;
+        }
+        if (Last_Id != Prev_Id) {
+            if (!Send_Messages(Last_Id, last_message)) {
+                error = "Error - Send Messages\n";
+                throw error;
+            }
+        }
+        last_message = message_get;
+    }
+    catch(string error) {
+        print_er(error);
+        return false;
+    }
+}*/
+
 bool Server_t::Send_Messages(string message) {
     try {
         auto begin = Data.begin();
         auto end = Data.end();
-        for (auto it = begin; it != end; ++it) {
-            long Id_send = it->first;
-            if (message_size.mtype != Id_send) {
-                if(!Messenger.Send_Message_Size(Memory_Id, &message_size, Id_send + 1, message.size(), 0)) {
-                    error = "Error - Send message size\n";
-                    throw error;
-                }
-                if(!Messenger.Send_Message_String(Memory_Id, &message_string, Id_send + 1, message, 0)) {
-                    error = "Error - Send message \n";
+        for (auto run = begin ; run != end; ++run) {
+            long Id_send = run->first;
+            if (Last_Id != Id_send) {
+                if(!Messenger.Send_Message(Memory_Id, &message_string, &message_size, Id_send + 1, message, 0)) {
+                    error = "Error - Send messages string\n";
                     throw error;
                 }
                 printf("Send to %ld, message: %s\n", Id_send, message.c_str());
@@ -224,15 +277,11 @@ bool Server_t::Send_Messages(long id, string message) {
         string new_message = name_user + " : " + message; 
         auto begin = Data.begin();
         auto end = Data.end();
-        for (auto it = begin; it != end; ++it) {
-            long Id_send = it->first;
-            if (Id_send != message_size.mtype) {
-                if(!Messenger.Send_Message_Size(Memory_Id, &message_size, Id_send + 1, new_message.size(), 0)) {
-                    error = "Error - Send message size\n";
-                    throw error;
-                }
-                if(!Messenger.Send_Message_String(Memory_Id, &message_string, Id_send + 1, new_message, 0)) {
-                    error = "Error - Send message \n";
+        for (auto run = begin ; run != end; ++run) {
+            long Id_send = run->first;
+            if (Id_send != Last_Id) {
+                if(!Messenger.Send_Message(Memory_Id, &message_string, &message_size, Id_send + 1, new_message, 0)) {
+                    error = "Error - Send messages long string\n";
                     throw error;
                 }
                 printf("Send to %ld, message: %s\n",Id_send, new_message.c_str());
@@ -250,12 +299,8 @@ bool Server_t::Send_Messages_S(long id, string message) {
     try{
         message += std::to_string(id);
         size_t size = message.size();
-        if(!Messenger.Send_Message_Size(Memory_Id, &message_size, system_id + 1, size, 0)) {
-            error = "Error - Send message size\n";
-            throw error;
-        }
-        if(!Messenger.Send_Message_String(Memory_Id, &message_string, system_id + 1, message, 0)) {
-            error = "Error - Send message \n";
+        if(!Messenger.Send_Message(Memory_Id, &message_string, &message_size, system_id + 1, message, 0)) {
+            error = "Error - Send messages S\n";
             throw error;
         }
         printf("Send to %ld, message: %s\n", message_size.mtype - 1, message.c_str());
@@ -269,13 +314,8 @@ bool Server_t::Send_Messages_S(long id, string message) {
 
 bool Server_t::Send_Messages_L(long id, string message) {
     try{
-        size_t size = message.size();
-        if(!Messenger.Send_Message_Size(Memory_Id, &message_size, id + 1, size, 0)) {
-            error = "Error - Send message size\n";
-            throw error;
-        }
-        if(!Messenger.Send_Message_String(Memory_Id, &message_string, id + 1, message, 0)) {
-            error = "Error - Send message \n";
+        if(!Messenger.Send_Message(Memory_Id, &message_string, &message_size, id + 1, message, 0)) {
+            error = "Error - Send message L\n";
             throw error;
         }
         printf("Send to %ld, message: %s\n", id + 1, message.c_str());
@@ -298,16 +338,16 @@ long Server_t::Find_New_id() {
 
 bool Server_t::System_Call(string message) {
     try {
-		if (message.compare(0, 19, new_client_sys) == 0) {
-            string name = message.substr(19);
+		if (message.compare(0, strlen(new_client_sys), new_client_sys) == 0) {
+            string name = message.substr(strlen(new_client_sys));
 			if (!System_New_User(name)){
 				error = "Error - new user\n";
 				throw error;
 			}
         }
 
-		else if(message.compare(0, 12, exit_sys) == 0) {
-            string id = message.substr(12);
+		else if(message.compare(0, strlen(exit_sys), exit_sys) == 0) {
+            string id = message.substr(strlen(exit_sys));
 			System_Exit_User(id);
         }
 
@@ -315,16 +355,16 @@ bool Server_t::System_Call(string message) {
 			Admin_Stop_Server();
 		}
 
-		else if(message.compare(0, 20, delete_user_sys) == 0) {
-			string name_user = message.substr(20);
+		else if(message.compare(0, strlen(delete_user_sys), delete_user_sys) == 0) {
+			string name_user = message.substr(strlen(delete_user_sys));
 			if (!Admin_Del_User(name_user)) {
 				error = "Error - del user";
 				throw error;
 			}
 		}
 
-		else if (message.compare(0, 16, find_id_sys) == 0) {
-			string name_user = message.substr(16);
+		else if (message.compare(0, strlen(find_id_sys), find_id_sys) == 0) {
+			string name_user = message.substr(strlen(find_id_sys));
 			Admin_Id_User(name_user);
 		}
 
@@ -340,13 +380,15 @@ bool Server_t::System_New_User(string name) {
 	try {
 		if (name == "Admin") {
 			auto it = Data.find(ADMIN);
-			if (it == Data.end()) {
-				Send_Messages_S(ADMIN, "Admin");
+			if (it != Data.end()) {
+                Send_Messages_S(ADMIN, "Admin");
+                Print_Users();
 			}
 			else {
                 Data.insert(pair<long, string>(ADMIN, "Admin"));
                 Id_Mas.push_back(ADMIN);
-				Send_Messages_S(ADMIN, "Admin");
+                Send_Messages_S(ADMIN, "Admin");
+                Print_Users();
 			}
 		}
 		else {
@@ -358,6 +400,7 @@ bool Server_t::System_New_User(string name) {
 			}
             Data.insert(pair<long, string>(client_id, name));
             Id_Mas.push_back(client_id);
+            Print_Users();
 			if (!Send_Messages_S(client_id, name)) {
 				error = "Error - new user\n";
 				throw error;
@@ -394,7 +437,7 @@ bool Server_t::System_Exit_User(string name) {
 		name = it->second;
         name = "User exit : " + name;
 		Send_Messages(name);
-        Send_Messages_L(client_id, end_sys);
+        Send_Messages_L(client_id, exit_sys);
         Data.erase(client_id);
         auto run = Id_Mas.begin();
         auto end = Id_Mas.end();
@@ -417,7 +460,7 @@ void Server_t::Admin_Id_User(string name) {
 	auto end = Data.end();
 	for ( ; runner != end; ++runner){
 		if (runner->second == name) {
-			Send_Messages(ADMIN, std::to_string(runner->first));
+			Send_Messages_L(ADMIN, std::to_string(runner->first));
 			return;
 		}
 	}
@@ -465,9 +508,10 @@ bool Server_t::Admin_Del_User(string name) {
 }
 
 void Server_t::Admin_Stop_Server() {
-	if (message_string.mtype == ADMIN) {
-		string message = end_sys;
-		Send_Messages(message);
+	if ((Last_Id == ADMIN) || (Last_Id == system_id)) {
+        string message = end_sys;
+        Send_Messages(message);
+        Send_Messages_L(ADMIN, message);
 		flag = false;
 	}
 }

@@ -12,9 +12,11 @@ enum System_Num {
     ERROR = -1,
     SYSTEM,
     SUCCESS,
-	ADMIN,
+    ADMIN,
+    LOL,
+    system_id,
+    MAX_SIZE = 100,
     SUCCESS_SYS = 42,
-    system_id = 128,
 };
 
 const char* new_client_sys = "#system:new_client:";
