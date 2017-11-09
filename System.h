@@ -9,14 +9,14 @@
 using std::string;
 
 enum System_Num {
-    ERROR = -1,
-    SYSTEM,
-    SUCCESS,
-    ADMIN,
-    LOL,
-    system_id,
-    MAX_SIZE = 100,
-    SUCCESS_SYS = 42,
+	ERROR = -1,
+	SYSTEM,
+	SUCCESS,
+	ADMIN,
+	LOL,
+	SYSTEM_ID,
+	MAX_SIZE = 100,
+	SUCCESS_SYS = 42,
 };
 
 const char* new_client_sys = "#system:new_client:";
@@ -28,29 +28,33 @@ const char* end_sys = "#system:end";
 const char* error_log = "/home/dmitry/WorkSpace/Message/error.log";
 
 int do_Nothing() {
-    return SUCCESS_SYS;
+	return SUCCESS_SYS;
 }
 
-bool IsItNumber(string word){
+bool IsItNumber(string word) {
 	size_t i = 0;
-	if (word[0] == '-'){
+	if (word[0] == '-') {
 		i++;
 	}
-	while (word[i] != '\0'){
+	while (word[i] != '\0') {
 		if (!isdigit(word[i++]))
 			return false;
 	}
 	return true;
 }
 
+void print_er(string error) {
+	printf("%s", error.c_str());
+}
+
 typedef struct _msgbuf {
-    long mtype;
-    char message[1];
+	long mtype;
+	char message[1];
 } msgbuf_t;
 
 typedef struct _msgsize {
-    long mtype;
-    size_t size;
+	long mtype;
+	size_t size;
 } msgsize_t;
 
 #endif // SYSTEM_HEADER
