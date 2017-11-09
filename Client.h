@@ -25,8 +25,8 @@ public:
 	explicit Client_t() :
 		error_file(NULL), memory_id(0), user_name(" "), user_id(0), error(" "), flag_of_working(true)
 	{
-		message_string.message[1] = { 0 };	message_size.mtype = 0;
-		message_size.size = 0;	message_string.mtype = 0;
+		message_size.mtype = 0; message_size.size = 0;
+		message_string.mtype = 0; message_string.message[1] = { 0 };
 	}
 	~Client_t();
 	bool Start();
@@ -73,14 +73,14 @@ bool Client_t::Start() {
 			error = "Error - fork \n";
 			throw error;
 		case 0:  //son
-			if (!Get_Message()) {
-				error = "Error - Get Message \n";
+			if (!Send_Message()) {
+				error = "Error - Send Message \n";
 				throw error;
 			}
 			break;
 		default: //father
-			if (!Send_Message()) {
-				error = "Error - Send Message \n";
+			if (!Get_Message()) {
+				error = "Error - Get Message \n";
 				throw error;
 			}
 			break;

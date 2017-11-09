@@ -27,8 +27,8 @@ public:
 		error_file(NULL), working_server_flag(true), last_id(0),
 		error(" "), memory_id(0), num_of_message(1), message_get(" ")
 	{
-		message_string.message[1] = { 0 };	message_size.mtype = 0;
-		message_size.size = 0;	message_string.mtype = 0;
+		message_size.mtype = 0; message_size.size = 0;
+		message_string.mtype = 0; message_string.message[1] = { 0 };
 		Id_Mas.push_back(SYSTEM_ID);
 	}
 	~Server_t() { Print_Users(); fclose(error_file); }

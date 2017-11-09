@@ -88,7 +88,7 @@ bool Message_t::Send_Message_String(int msgid, msgbuf_t* mes, long Id, string& m
 		size_t size = message.size();
 		memcpy(mes->message, message.c_str(), size);
 		if (check_size != size) {
-			//printf("Warning: Size: %zu _Size: %zu\n", size, check_size);
+			printf("Warning: Size: %zu _Size: %zu\n", size, check_size);
 		}
 		int status = msgsnd(msgid, (void *)mes, size * sizeof(char), type);
 		CHECK_ERROR(status, "Error - msgsnd - send string\n");
